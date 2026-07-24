@@ -25,12 +25,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       {/* Mobile sidebar */}
       <div className={`fixed left-0 top-0 h-full z-40 md:hidden transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
+        <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} isMobile={true} isFixed={false} />
       </div>
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-shrink-0">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} isFixed={false} />
         <div className={`sidebar-transition ${collapsed ? 'w-16' : 'w-60'}`} />
       </div>
 

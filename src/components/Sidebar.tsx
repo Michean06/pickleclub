@@ -45,9 +45,11 @@ const groups = ['Player', 'Staff', 'Admin'];
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isMobile?: boolean;
+  isFixed?: boolean;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, isMobile = false, isFixed = true }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
@@ -152,7 +154,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={`
-        fixed left-0 top-0 h-full z-40 flex flex-col bg-card border-r border-border shadow-card
+        ${isFixed ? 'fixed left-0 top-0' : ''} h-full z-40 flex flex-col bg-card border-r border-border shadow-card
         sidebar-transition overflow-y-auto
         ${collapsed ? 'w-16' : 'w-60'}
       `}
@@ -216,7 +218,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* Bottom section */}
-      <div className="border-t border-border px-2 py-3 flex-shrink-0">
+      <div className="border-t border-border px-2 py-3 flex-shrink-0 relative z-50">
         {!collapsed && (
           <div className="flex items-center gap-3 px-3 py-2 mb-2">
             <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -255,7 +257,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         <button
           onClick={onToggle}
-          className={`nav-item nav-item-inactive w-full mt-1 ${collapsed ? 'justify-center px-0' : 'justify-between'}`}
+          className={`nav-item nav-item-inactive w-full mt-1 ${collapsed ? 'justify-center px-0' : 'justify-between'} pointer-events-auto`}
         >
           {!collapsed && <span className="text-xs">Collapse</span>}
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
