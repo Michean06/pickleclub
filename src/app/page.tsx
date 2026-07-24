@@ -142,8 +142,18 @@ export default function PlayerDashboardPage() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl gradient-green flex items-center justify-center flex-shrink-0 shadow-card-md">
-              <span className="text-white font-extrabold text-lg">{initials}</span>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-card-md overflow-hidden">
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-200 flex items-center justify-center">
+                  <span className="text-slate-600 font-extrabold text-lg">{initials}</span>
+                </div>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">

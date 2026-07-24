@@ -171,22 +171,22 @@ export default function PlayerProfilePage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         {/* Profile Hero */}
         <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
           {/* Banner */}
-          <div className="h-28 gradient-green relative">
+          <div className="h-20 bg-slate-100 relative z-0">
             <div className="absolute inset-0 opacity-20"
               style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }}
             />
           </div>
 
           {/* Avatar + info */}
-          <div className="px-6 pb-6">
+          <div className="px-6 pb-6 relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-10">
               {/* Avatar */}
-              <div className="relative flex-shrink-0">
-                <div className="w-20 h-20 rounded-2xl gradient-green border-4 border-card shadow-card-md flex items-center justify-center overflow-hidden">
+              <div className="relative flex-shrink-0 mx-auto sm:mx-0">
+                <div className="w-20 h-20 rounded-2xl border-4 border-card shadow-card-md flex items-center justify-center overflow-hidden">
                   {profile.avatar_url ? (
                     <img 
                       src={profile.avatar_url} 
@@ -194,7 +194,9 @@ export default function PlayerProfilePage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-white text-2xl font-extrabold">{initials}</span>
+                    <div className="w-full h-full bg-slate-200 flex items-center justify-center">
+                      <span className="text-slate-600 text-2xl font-extrabold">{initials}</span>
+                    </div>
                   )}
                   {uploadingAvatar && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -219,7 +221,7 @@ export default function PlayerProfilePage() {
               </div>
 
               {/* Name + meta */}
-              <div className="flex-1 min-w-0 pt-2 sm:pt-0">
+              <div className="flex-1 min-w-0 pt-2 sm:pt-0 text-center sm:text-left">
                 <div className="flex items-center gap-2 flex-wrap">
                   {editingName ? (
                     <div className="flex items-center gap-2">
@@ -252,7 +254,7 @@ export default function PlayerProfilePage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap justify-center sm:justify-start">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${skillCfg.bg} ${skillCfg.text}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${skillCfg.dot}`} />
                     {profile.skill_level.charAt(0).toUpperCase() + profile.skill_level.slice(1)}
@@ -274,7 +276,7 @@ export default function PlayerProfilePage() {
 
               {/* Player ID badge */}
               {profile.player_id && (
-                <div className="flex-shrink-0 bg-muted/60 border border-border rounded-xl px-4 py-2.5 text-center">
+                <div className="flex-shrink-0 bg-muted/60 border border-border rounded-xl px-4 py-2.5 text-center mx-auto sm:mx-0 sm:ml-auto">
                   <p className="text-2xs text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">Player ID</p>
                   <p className="font-mono text-sm font-bold text-foreground">{profile.player_id}</p>
                 </div>
@@ -298,7 +300,7 @@ export default function PlayerProfilePage() {
             <button
               key={`profile-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 whitespace-nowrap flex-shrink-0 ${
+              className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab.id
                   ? 'bg-card text-foreground shadow-card'
                   : 'text-muted-foreground hover:text-foreground hover:bg-card/50'

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Menu } from 'lucide-react';
+import { Menu, ChevronRight } from 'lucide-react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -11,6 +11,7 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileCollapsed, setMobileCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -34,7 +35,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative z-10">
         {/* Mobile topbar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-card border-b border-border sticky top-0 z-20">
           <button

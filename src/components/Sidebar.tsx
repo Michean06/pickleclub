@@ -153,7 +153,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <aside
       className={`
         fixed left-0 top-0 h-full z-40 flex flex-col bg-card border-r border-border shadow-card
-        sidebar-transition overflow-hidden
+        sidebar-transition overflow-y-auto
         ${collapsed ? 'w-16' : 'w-60'}
       `}
     >
