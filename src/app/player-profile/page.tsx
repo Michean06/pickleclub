@@ -34,6 +34,8 @@ export default function PlayerProfilePage() {
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profile?.full_name) setNameInput(profile.full_name);
@@ -61,6 +63,80 @@ export default function PlayerProfilePage() {
       setEditingName(false);
     }
   }, [profile?.id, profile?.full_name, nameInput, supabase, refreshProfile]);
+
+  const handleAvatarUpload = useCallback(async (file: File) => {
+    if (!profile?.id || !file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${profile.id}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      console.log('[Avatar Upload] Uploading to:', filePath);
+
+      // Upload to Supabase storage
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('[Avatar Upload] Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('[Avatar Upload] Upload successful:', uploadData);
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      console.log('[Avatar Upload] Public URL:', publicUrl);
+
+      // Update user profile with avatar URL
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) {
+        console.error('[Avatar Upload] Update error:', updateError);
+        throw updateError;
+      }
+
+      console.log('[Avatar Upload] Profile updated successfully');
+      await refreshProfile();
+    } catch (err: any) {
+      console.error('[PlayerProfile] avatar upload error:', err?.message);
+      console.error('[PlayerProfile] full error:', err);
+      alert(`Failed to upload avatar: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }, [profile?.id, supabase, refreshProfile]);
+
+  const handleCameraClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleAvatarUpload(file);
+    }
+  }, [handleAvatarUpload]);
 
   if (!profile) {
     return (
@@ -110,12 +186,36 @@ export default function PlayerProfilePage() {
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-10">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
-                <div className="w-20 h-20 rounded-2xl gradient-green border-4 border-card shadow-card-md flex items-center justify-center">
-                  <span className="text-white text-2xl font-extrabold">{initials}</span>
+                <div className="w-20 h-20 rounded-2xl gradient-green border-4 border-card shadow-card-md flex items-center justify-center overflow-hidden">
+                  {profile.avatar_url ? (
+                    <img 
+                      src={profile.avatar_url} 
+                      alt={profile.full_name} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white text-2xl font-extrabold">{initials}</span>
+                  )}
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <Loader2 size={20} className="animate-spin text-white" />
+                    </div>
+                  )}
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-card border-2 border-card flex items-center justify-center cursor-pointer hover:bg-muted transition-colors">
+                <button
+                  onClick={handleCameraClick}
+                  disabled={uploadingAvatar}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-card border-2 border-card flex items-center justify-center cursor-pointer hover:bg-muted transition-colors disabled:opacity-50"
+                >
                   <Camera size={11} className="text-muted-foreground" />
-                </div>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
               </div>
 
               {/* Name + meta */}

@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase/client';
 import {
   User, Bell, Palette, Lock, Shield, ChevronRight, Check,
   Moon, Sun, Monitor, Volume2, VolumeX, Mail, MessageSquare,
-  Smartphone, Globe, Eye, EyeOff, Key, LogOut, Trash2, Save
+  Smartphone, Globe, Eye, EyeOff, Key, LogOut, Trash2, Save, Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 
 
@@ -41,15 +44,26 @@ const TABS: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SettingsPage() {
+  const { profile, refreshProfile } = useAuth();
+  const supabase = createClient();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Profile state
-  const [displayName, setDisplayName] = useState('Alex Rivera');
-  const [email, setEmail] = useState('alex.rivera@pickleclub.com');
-  const [phone, setPhone] = useState('+1 (555) 234-5678');
-  const [bio, setBio] = useState('Passionate pickleball player. 4.5 rating. Love doubles!');
+  // Profile state - initialize from real profile
+  const [displayName, setDisplayName] = useState(profile?.full_name || '');
+  const [email, setEmail] = useState(profile?.email || '');
+  const [phone, setPhone] = useState('');
+  const [bio, setBio] = useState('');
   const [language, setLanguage] = useState('en');
+
+  // Update profile state when profile loads
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.full_name || '');
+      setEmail(profile.email || '');
+    }
+  }, [profile]);
 
   // Notification state
   const [notif, setNotif] = useState({
@@ -81,9 +95,28 @@ export default function SettingsPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [sessionTimeout, setSessionTimeout] = useState('30');
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    if (!profile?.id) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ full_name: displayName })
+        .eq('id', profile.id);
+      
+      if (error) throw error;
+      
+      await refreshProfile();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      toast.success('Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const ACCENT_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -454,12 +487,27 @@ export default function SettingsPage() {
               <div className="mt-6 pt-4 border-t border-border flex justify-end">
                 <button
                   onClick={handleSave}
+                  disabled={saving}
                   className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
                     saved ? 'bg-green-500 text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  }`}
+                  } ${saving ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                  {saved ? <Check size={15} /> : <Save size={15} />}
-                  {saved ? 'Saved!' : 'Save Changes'}
+                  {saving ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      Saving...
+                    </>
+                  ) : saved ? (
+                    <>
+                      <Check size={15} />
+                      Saved!
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      Save Changes
+                    </>
+                  )}
                 </button>
               </div>
             </div>

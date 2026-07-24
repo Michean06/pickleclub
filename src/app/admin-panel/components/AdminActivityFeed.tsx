@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { UserPlus, CreditCard, Trophy, Wrench, LogIn, AlertTriangle, Calendar, ShieldCheck, TrendingUp, Filter, RefreshCw, ChevronDown, Circle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserPlus, CreditCard, Trophy, Wrench, LogIn, AlertTriangle, Calendar, ShieldCheck, TrendingUp, Filter, RefreshCw, ChevronDown, Circle, Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface ActivityEvent {
   id: string;
@@ -14,21 +15,6 @@ interface ActivityEvent {
   severity?: 'info' | 'success' | 'warning' | 'error';
   meta?: string;
 }
-
-const activityEvents: ActivityEvent[] = [
-  { id: 'act-1', type: 'alert', title: 'Court 6 went offline', description: 'Maintenance mode triggered automatically — net sensor fault detected', timestamp: '9:47 AM', timeAgo: '3 min ago', severity: 'error', meta: 'Court 6' },
-  { id: 'act-2', type: 'payment', title: 'Credit purchase', description: 'Angela Torres purchased 20 credits for ₱900', timestamp: '9:44 AM', timeAgo: '6 min ago', actor: 'Angela Torres', severity: 'success', meta: '₱900' },
-  { id: 'act-3', type: 'match', title: 'Match completed', description: 'Court 2 · Kim Ong vs Maria Santos — Kim won 11-7, 11-9', timestamp: '9:41 AM', timeAgo: '9 min ago', severity: 'info', meta: 'Court 2' },
-  { id: 'act-4', type: 'player', title: 'New player registered', description: 'Carlos Mendoza joined as Intermediate · Referred by Angela Torres', timestamp: '9:38 AM', timeAgo: '12 min ago', actor: 'Carlos Mendoza', severity: 'success', meta: 'New' },
-  { id: 'act-5', type: 'booking', title: 'Court reservation made', description: 'Juan Dela Cruz booked Court 4 for 2:00–3:00 PM today', timestamp: '9:35 AM', timeAgo: '15 min ago', actor: 'Juan Dela Cruz', severity: 'info', meta: 'Court 4' },
-  { id: 'act-6', type: 'auth', title: 'Staff login', description: 'Staff member Reyna Cruz logged in from new device', timestamp: '9:30 AM', timeAgo: '20 min ago', actor: 'Reyna Cruz', severity: 'warning', meta: 'New device' },
-  { id: 'act-7', type: 'payment', title: 'Credit purchase', description: 'Jose Ramos purchased 10 credits for ₱450', timestamp: '9:22 AM', timeAgo: '28 min ago', actor: 'Jose Ramos', severity: 'success', meta: '₱450' },
-  { id: 'act-8', type: 'match', title: 'Match completed', description: 'Court 1 · Angela Torres vs Juan Dela Cruz — Angela won 11-4, 11-6', timestamp: '9:15 AM', timeAgo: '35 min ago', severity: 'info', meta: 'Court 1' },
-  { id: 'act-9', type: 'maintenance', title: 'Maintenance completed', description: 'Court 5 net replacement finished — back online', timestamp: '9:00 AM', timeAgo: '50 min ago', severity: 'success', meta: 'Court 5' },
-  { id: 'act-10', type: 'system', title: 'Daily backup completed', description: 'Automated database backup finished — 247 player records secured', timestamp: '8:00 AM', timeAgo: '1 hr 50 min ago', severity: 'info', meta: 'System' },
-  { id: 'act-11', type: 'player', title: 'Player rating updated', description: 'Kim Ong\'s ELO rating increased from 1572 → 1598 after 3 wins', timestamp: '8:45 AM', timeAgo: '1 hr 5 min ago', actor: 'Kim Ong', severity: 'success', meta: '+26 ELO' },
-  { id: 'act-12', type: 'alert', title: 'Low credit balance alert', description: 'Maria Santos has 1 credit remaining — auto-notification sent', timestamp: '8:30 AM', timeAgo: '1 hr 20 min ago', actor: 'Maria Santos', severity: 'warning', meta: '1 credit' },
-];
 
 const typeConfig: Record<ActivityEvent['type'], { icon: React.ElementType; bg: string; color: string }> = {
   player: { icon: UserPlus, bg: 'bg-blue-100', color: 'text-blue-600' },
@@ -58,14 +44,93 @@ const filterMap: Record<string, ActivityEvent['type'][]> = {
   System: ['auth', 'system', 'booking'],
 };
 
+function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+}
+
+function mapAuditLogToEvent(log: any): ActivityEvent {
+  const typeMap: Record<string, ActivityEvent['type']> = {
+    'player_created': 'player',
+    'player_updated': 'player',
+    'credit_purchase': 'payment',
+    'credit_added': 'payment',
+    'match_completed': 'match',
+    'match_created': 'match',
+    'court_maintenance': 'maintenance',
+    'user_login': 'auth',
+    'system_alert': 'alert',
+    'booking_created': 'booking',
+    'booking_cancelled': 'booking',
+    'system_backup': 'system',
+  };
+
+  const type = typeMap[log.action] || 'system';
+  const severityMap: Record<string, ActivityEvent['severity']> = {
+    'player_created': 'success',
+    'credit_purchase': 'success',
+    'match_completed': 'info',
+    'court_maintenance': 'warning',
+    'system_alert': 'error',
+    'booking_cancelled': 'warning',
+  };
+
+  return {
+    id: log.id,
+    type,
+    title: log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    description: log.details || log.action,
+    timestamp: new Date(log.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    timeAgo: formatTimeAgo(new Date(log.created_at)),
+    actor: log.performed_by,
+    severity: severityMap[log.action] || 'info',
+    meta: log.target_id,
+  };
+}
+
 export default function AdminActivityFeed() {
+  const supabase = createClient();
   const [activeFilter, setActiveFilter] = useState('All');
   const [showAll, setShowAll] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+
+  const fetchActivity = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const events = (data || []).map(mapAuditLogToEvent);
+      setActivityEvents(events);
+    } catch (error) {
+      console.error('Error fetching activity:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActivity();
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    fetchActivity().finally(() => setRefreshing(false));
   };
 
   const filtered = activeFilter === 'All'
@@ -80,6 +145,17 @@ export default function AdminActivityFeed() {
     payments: activityEvents.filter((e) => e.type === 'payment').length,
     matches: activityEvents.filter((e) => e.type === 'match').length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={24} className="animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading activity feed...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -145,7 +221,12 @@ export default function AdminActivityFeed() {
 
         {/* Events list */}
         <div className="divide-y divide-border">
-          {displayed.map((event) => {
+          {displayed.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Filter size={28} className="mb-2 opacity-40" />
+              <p className="text-sm">No events for this filter</p>
+            </div>
+          ) : displayed.map((event) => {
             const cfg = typeConfig[event.type];
             const EventIcon = cfg.icon;
             return (
@@ -174,13 +255,6 @@ export default function AdminActivityFeed() {
               </div>
             );
           })}
-
-          {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Filter size={28} className="mb-2 opacity-40" />
-              <p className="text-sm">No events for this filter</p>
-            </div>
-          )}
         </div>
 
         {/* Show more */}

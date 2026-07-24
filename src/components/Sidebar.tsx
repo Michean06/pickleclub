@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
@@ -8,6 +8,7 @@ import { LayoutDashboard, Settings, ChevronLeft, ChevronRight, LogOut, Gavel, Cr
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
+import { createClient } from '@/lib/supabase/client';
 
 
 interface NavItem {
@@ -26,10 +27,10 @@ const navItems: NavItem[] = [
   { id: 'nav-leaderboard', label: 'Leaderboard', href: '/leaderboard', icon: Trophy, group: 'Player', roles: ['player', 'staff', 'admin'] },
   { id: 'nav-court-reservation', label: 'Court Reservation', href: '/court-reservation', icon: CalendarDays, group: 'Player', roles: ['player', 'staff', 'admin'] },
   { id: 'nav-booking-confirmation', label: 'Booking Confirmation', href: '/booking-confirmation', icon: CheckSquare, group: 'Player', roles: ['player', 'staff', 'admin'] },
-  { id: 'nav-messaging', label: 'Messages', href: '/player-messaging', icon: MessageSquare, badge: 8, group: 'Player', roles: ['player', 'admin'] },
-  { id: 'nav-notifications', label: 'Notifications', href: '/notifications', icon: Bell, badge: 4, group: 'Player', roles: ['player', 'staff', 'admin'] },
+  { id: 'nav-messaging', label: 'Messages', href: '/player-messaging', icon: MessageSquare, group: 'Player', roles: ['player', 'admin'] },
+  { id: 'nav-notifications', label: 'Notifications', href: '/notifications', icon: Bell, group: 'Player', roles: ['player', 'staff', 'admin'] },
   { id: 'nav-buy-credits', label: 'Buy Credits', href: '/buy-credits', icon: CreditCard, group: 'Player', roles: ['player', 'admin'] },
-  { id: 'nav-staff', label: 'Staff Dashboard', href: '/staff-dashboard', icon: Gavel, badge: 3, group: 'Staff', roles: ['staff', 'admin'] },
+  { id: 'nav-staff', label: 'Staff Dashboard', href: '/staff-dashboard', icon: Gavel, group: 'Staff', roles: ['staff', 'admin'] },
   { id: 'nav-staff-presence', label: 'Staff Presence', href: '/staff-presence', icon: UsersRound, group: 'Staff', roles: ['staff', 'admin'] },
   { id: 'nav-court-maintenance', label: 'Court Maintenance', href: '/court-maintenance', icon: Wrench, group: 'Staff', roles: ['staff', 'admin'] },
   { id: 'nav-staff-scheduling', label: 'Staff Scheduling', href: '/staff-scheduling', icon: ClipboardList, group: 'Staff', roles: ['staff', 'admin'] },
@@ -49,10 +50,77 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const supabase = createClient();
+  const channelRef = useRef<any>(null);
 
   const userRole = profile?.role || 'player';
+
+  useEffect(() => {
+    console.log('[Sidebar] Profile changed:', profile?.full_name);
+  }, [profile?.full_name]);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (!profile?.id) return;
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        console.log('[Sidebar] Fetching unread count for user:', user.id);
+
+        // Get all conversations the user is part of
+        const { data: participantData } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id, last_read_at')
+          .eq('user_id', user.id);
+
+        console.log('[Sidebar] Participant data:', participantData);
+
+        if (!participantData || participantData.length === 0) {
+          setUnreadCount(0);
+          return;
+        }
+
+        // Count unread messages across all conversations
+        let totalUnread = 0;
+        for (const participant of participantData) {
+          const { count } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('conversation_id', participant.conversation_id)
+            .gt('created_at', participant.last_read_at || new Date(0).toISOString())
+            .neq('sender_id', user.id);
+
+          console.log(`[Sidebar] Conversation ${participant.conversation_id}: last_read_at=${participant.last_read_at}, unread=${count}`);
+          totalUnread += count || 0;
+        }
+
+        console.log('[Sidebar] Total unread count:', totalUnread);
+        setUnreadCount(totalUnread);
+      } catch (error) {
+        console.error('[Sidebar] Error fetching unread count:', error);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Poll for updates every 30 seconds instead of using realtime
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      console.log('[Sidebar] Refreshing profile...');
+      refreshProfile().then(() => {
+        console.log('[Sidebar] Profile refreshed');
+      });
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [profile?.id, supabase, refreshProfile]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -72,6 +140,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     : 'U';
 
   const roleLabel = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+
+  // Dynamic nav items with badge counts
+  const dynamicNavItems = navItems.map(item => {
+    if (item.id === 'nav-messaging') {
+      return { ...item, badge: unreadCount };
+    }
+    return item;
+  });
 
   return (
     <aside
@@ -95,7 +171,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 py-3">
         {groups.map((group) => {
-          const groupItems = navItems.filter(
+          const groupItems = dynamicNavItems.filter(
             (item) => item.group === group && (!item.roles || item.roles.includes(userRole))
           );
           if (groupItems.length === 0) return null;
@@ -143,8 +219,18 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="border-t border-border px-2 py-3 flex-shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3 px-3 py-2 mb-2">
-            <div className="w-8 h-8 rounded-full gradient-green flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">{initials}</span>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full gradient-green flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">{initials}</span>
+                </div>
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{profile?.full_name || 'Loading...'}</p>

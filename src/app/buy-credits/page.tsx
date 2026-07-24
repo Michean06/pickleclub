@@ -16,12 +16,6 @@ interface CreditPackage {
   popular?: boolean;
 }
 
-const FALLBACK_PACKAGES: CreditPackage[] = [
-  { id: 'pkg-1', name: 'Starter', price_php: 250, credits: 5, is_active: true },
-  { id: 'pkg-2', name: 'Standard', price_php: 450, credits: 10, is_active: true, popular: true },
-  { id: 'pkg-3', name: 'Premium', price_php: 800, credits: 20, is_active: true },
-];
-
 const PACKAGE_ICONS = ['🌱', '⚡', '🏆', '🎯'];
 const PACKAGE_GRADIENTS = [
   'from-slate-600 to-slate-800',
@@ -52,7 +46,7 @@ export default function BuyCreditsPage() {
           .order('price_php', { ascending: true });
 
         if (error || !data?.length) {
-          setPackages(FALLBACK_PACKAGES);
+          setPackages([]);
         } else {
           // Mark the middle package as popular if none is marked
           const pkgs = data as CreditPackage[];
@@ -61,7 +55,7 @@ export default function BuyCreditsPage() {
           setPackages(pkgs);
         }
       } catch {
-        setPackages(FALLBACK_PACKAGES);
+        setPackages([]);
       } finally {
         setLoadingPkgs(false);
       }
@@ -154,11 +148,17 @@ export default function BuyCreditsPage() {
 
         {/* Packages */}
         {loadingPkgs ? (
-          <div className="flex items-center justify-center py-16">
+          <div className="bg-card border border-border rounded-2xl p-8 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
-              <Loader2 size={28} className="animate-spin text-primary" />
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-sm text-muted-foreground">Loading packages...</p>
             </div>
+          </div>
+        ) : packages.length === 0 ? (
+          <div className="bg-card border border-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3">
+            <ShoppingCart size={32} className="text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">No credit packages available</p>
+            <p className="text-xs text-muted-foreground">Please contact staff to purchase credits</p>
           </div>
         ) : (
           <>

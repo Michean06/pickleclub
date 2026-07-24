@@ -33,16 +33,6 @@ const SHIFT_TYPES = [
   { key: 'evening', label: 'Evening', start: '18:00', end: '23:00', icon: Moon, color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
 ] as const;
 
-const MOCK_SHIFTS: Shift[] = [
-  { id: 's1', staffId: 'mock-1', staffName: 'Alex Rivera', role: 'staff', day: 0, shiftType: 'morning', startTime: '06:00', endTime: '14:00', note: '' },
-  { id: 's2', staffId: 'mock-2', staffName: 'Jordan Lee', role: 'staff', day: 0, shiftType: 'afternoon', startTime: '14:00', endTime: '22:00', note: '' },
-  { id: 's3', staffId: 'mock-3', staffName: 'Sam Torres', role: 'admin', day: 1, shiftType: 'morning', startTime: '06:00', endTime: '14:00', note: 'Opening duties' },
-  { id: 's4', staffId: 'mock-1', staffName: 'Alex Rivera', role: 'staff', day: 2, shiftType: 'evening', startTime: '18:00', endTime: '23:00', note: '' },
-  { id: 's5', staffId: 'mock-2', staffName: 'Jordan Lee', role: 'staff', day: 3, shiftType: 'morning', startTime: '06:00', endTime: '14:00', note: '' },
-  { id: 's6', staffId: 'mock-3', staffName: 'Sam Torres', role: 'admin', day: 4, shiftType: 'afternoon', startTime: '14:00', endTime: '22:00', note: 'Weekend prep' },
-  { id: 's7', staffId: 'mock-1', staffName: 'Alex Rivera', role: 'staff', day: 5, shiftType: 'morning', startTime: '06:00', endTime: '14:00', note: '' },
-  { id: 's8', staffId: 'mock-2', staffName: 'Jordan Lee', role: 'staff', day: 6, shiftType: 'afternoon', startTime: '14:00', endTime: '22:00', note: 'Weekend close' },
-];
 
 interface AddShiftModalProps {
   onClose: () => void;
@@ -160,7 +150,7 @@ function AddShiftModal({ onClose, onAdd, staffList }: AddShiftModalProps) {
 export default function StaffSchedulingPage() {
   const supabase = createClient();
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
-  const [shifts, setShifts] = useState<Shift[]>(MOCK_SHIFTS);
+  const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -191,12 +181,8 @@ export default function StaffSchedulingPage() {
       if (fetchError) throw fetchError;
       setStaffList((data as StaffMember[]) || []);
     } catch (err: any) {
-      setError('Failed to load staff. Showing sample data.');
-      setStaffList([
-        { id: 'mock-1', full_name: 'Alex Rivera', role: 'staff', is_active: true },
-        { id: 'mock-2', full_name: 'Jordan Lee', role: 'staff', is_active: true },
-        { id: 'mock-3', full_name: 'Sam Torres', role: 'admin', is_active: true },
-      ]);
+      setError('Failed to load staff.');
+      setStaffList([]);
     } finally {
       setLoading(false);
     }
@@ -461,11 +447,7 @@ export default function StaffSchedulingPage() {
         <AddShiftModal
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddShift}
-          staffList={staffList.length > 0 ? staffList : [
-            { id: 'mock-1', full_name: 'Alex Rivera', role: 'staff', is_active: true },
-            { id: 'mock-2', full_name: 'Jordan Lee', role: 'staff', is_active: true },
-            { id: 'mock-3', full_name: 'Sam Torres', role: 'admin', is_active: true },
-          ]}
+          staffList={staffList}
         />
       )}
     </AppLayout>

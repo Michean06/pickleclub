@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import { Search, UserPlus, Edit2, Ban, CreditCard, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Search, UserPlus, Edit2, Ban, CreditCard, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { createClient } from '@/lib/supabase/client';
 
 interface Player {
   id: string;
@@ -22,23 +23,10 @@ interface Player {
   memberSince: string;
 }
 
-const playersData: Player[] = [
-  { id: 'player-001', playerId: 'PKL-2026-0001', name: 'Angela Torres', email: 'angela.torres@email.com', phone: '09171234567', skillLevel: 'pro', credits: 15, rating: 1642, gamesPlayed: 199, winRate: 74.4, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Jan 2026' },
-  { id: 'player-002', playerId: 'PKL-2026-0012', name: 'Kim Ong', email: 'kim.ong@email.com', phone: '09189876543', skillLevel: 'advanced', credits: 8, rating: 1598, gamesPlayed: 186, winRate: 71.0, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Jan 2026' },
-  { id: 'player-003', playerId: 'PKL-2026-0024', name: 'Maria Santos', email: 'maria.santos@email.com', phone: '09221112233', skillLevel: 'advanced', credits: 8, rating: 1489, gamesPlayed: 174, winRate: 68.4, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Feb 2026' },
-  { id: 'player-004', playerId: 'PKL-2026-0087', name: 'Juan Dela Cruz', email: 'juan.delacruz@email.com', phone: '09154445566', skillLevel: 'advanced', credits: 9, rating: 1515, gamesPlayed: 145, winRate: 62.8, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Jan 2026' },
-  { id: 'player-005', playerId: 'PKL-2026-0031', name: 'Jose Ramos', email: 'jose.ramos@email.com', phone: '09278889900', skillLevel: 'intermediate', credits: 7, rating: 1423, gamesPlayed: 144, winRate: 60.4, status: 'active', lastActive: 'Jul 21, 2026', memberSince: 'Feb 2026' },
-  { id: 'player-006', playerId: 'PKL-2026-0045', name: 'Shawn Cruz', email: 'shawn.cruz@email.com', phone: '09331234567', skillLevel: 'intermediate', credits: 5, rating: 1312, gamesPlayed: 98, winRate: 55.1, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Mar 2026' },
-  { id: 'player-007', playerId: 'PKL-2026-0058', name: 'Peter Lim', email: 'peter.lim@email.com', phone: '09459876543', skillLevel: 'advanced', credits: 3, rating: 1455, gamesPlayed: 132, winRate: 63.6, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Feb 2026' },
-  { id: 'player-008', playerId: 'PKL-2026-0063', name: 'Ryan Dela Cruz', email: 'ryan.delacruz@email.com', phone: '09501122334', skillLevel: 'intermediate', credits: 6, rating: 1278, gamesPlayed: 76, winRate: 51.3, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Apr 2026' },
-  { id: 'player-009', playerId: 'PKL-2026-0071', name: 'Leo Bautista', email: 'leo.bautista@email.com', phone: '09612233445', skillLevel: 'beginner', credits: 10, rating: 1105, gamesPlayed: 34, winRate: 38.2, status: 'active', lastActive: 'Jul 22, 2026', memberSince: 'Jun 2026' },
-  { id: 'player-010', playerId: 'PKL-2026-0079', name: 'Carla Mendoza', email: 'carla.mendoza@email.com', phone: '09723344556', skillLevel: 'intermediate', credits: 0, rating: 1348, gamesPlayed: 88, winRate: 57.9, status: 'suspended', lastActive: 'Jul 18, 2026', memberSince: 'Mar 2026' },
-  { id: 'player-011', playerId: 'PKL-2026-0091', name: 'Mark Villanueva', email: 'mark.villanueva@email.com', phone: '09834455667', skillLevel: 'beginner', credits: 5, rating: 1142, gamesPlayed: 22, winRate: 40.9, status: 'active', lastActive: 'Jul 20, 2026', memberSince: 'Jun 2026' },
-  { id: 'player-012', playerId: 'PKL-2026-0104', name: 'Mia Reyes', email: 'mia.reyes@email.com', phone: '09945566778', skillLevel: 'intermediate', credits: 2, rating: 1289, gamesPlayed: 61, winRate: 49.2, status: 'pending', lastActive: 'Jul 19, 2026', memberSince: 'May 2026' },
-];
-
 export default function AdminPlayers() {
-  const [players, setPlayers] = useState<Player[]>(playersData);
+  const supabase = createClient();
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [skillFilter, setSkillFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -48,6 +36,45 @@ export default function AdminPlayers() {
   const [creditsToAdd, setCreditsToAdd] = useState('10');
   const [page, setPage] = useState(1);
   const rowsPerPage = 8;
+
+  const fetchPlayers = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('rating', { ascending: false });
+      
+      if (error) throw error;
+      
+      const mapped = (data || []).map((p: any) => ({
+        id: p.id,
+        playerId: p.player_id || 'N/A',
+        name: p.full_name || 'Unknown',
+        email: p.email || '',
+        phone: p.phone || '',
+        skillLevel: p.skill_level || 'beginner',
+        credits: p.credits || 0,
+        rating: p.rating || 1200,
+        gamesPlayed: p.games_played || 0,
+        winRate: p.games_played ? Math.round((p.wins / p.games_played) * 100 * 10) / 10 : 0,
+        status: p.status || 'active',
+        lastActive: p.last_active ? new Date(p.last_active).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never',
+        memberSince: p.member_since ? new Date(p.member_since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Unknown',
+      }));
+      
+      setPlayers(mapped);
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      toast.error('Failed to load players');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlayers();
+  }, []);
 
   const filtered = players.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.playerId.toLowerCase().includes(search.toLowerCase());
@@ -133,7 +160,22 @@ export default function AdminPlayers() {
               </tr>
             </thead>
             <tbody>
-              {paginated.map((player, idx) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 size={20} className="animate-spin text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">Loading players...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginated.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center">
+                    <p className="text-xs text-muted-foreground">No players found</p>
+                  </td>
+                </tr>
+              ) : paginated.map((player, idx) => (
                 <tr key={player.id} className={`table-row-hover border-b border-border last:border-0 ${idx % 2 === 1 ? 'bg-muted/10' : ''}`}>
                   <td className="px-4 py-3">
                     <span className="font-mono text-xs text-muted-foreground">{player.playerId}</span>

@@ -16,7 +16,7 @@ type AdminTab = 'overview' | 'players' | 'courts' | 'packages' | 'reports' | 'ac
 
 const tabs: { id: AdminTab; label: string; icon: React.ElementType; badge?: number }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'players', label: 'Players', icon: Users, badge: 247 },
+  { id: 'players', label: 'Players', icon: Users },
   { id: 'courts', label: 'Courts', icon: Layers },
   { id: 'packages', label: 'Packages', icon: Tag },
   { id: 'reports', label: 'Reports', icon: BarChart3 },

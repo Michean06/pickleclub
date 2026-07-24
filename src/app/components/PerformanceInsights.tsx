@@ -33,62 +33,18 @@ export default function PerformanceInsights() {
   const supabase = createClient();
   const [insights, setInsights] = useState<InsightData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState(false);
   const [activeTab, setActiveTab] = useState<'trend' | 'monthly' | 'radar'>('trend');
-
-  const buildMockInsights = useCallback((): InsightData => {
-    const rating = profile?.rating || 1200;
-    const wins = profile?.wins || 0;
-    const games = profile?.games_played || 0;
-    const winRate = games > 0 ? wins / games : 0.5;
-
-    const ratingTrend = Array.from({ length: 10 }, (_, i) => {
-      const base = rating - 80 + i * 9;
-      const jitter = Math.round((Math.random() - 0.5) * 20);
-      return {
-        date: `G${i + 1}`,
-        rating: Math.max(800, base + jitter),
-      };
-    });
-    ratingTrend[ratingTrend.length - 1].rating = rating;
-
-    const months = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
-    const winLossByMonth = months.map((month) => {
-      const total = Math.floor(Math.random() * 8) + 2;
-      const w = Math.round(total * winRate);
-      return { month, wins: w, losses: total - w };
-    });
-
-    const skillRadar = [
-      { skill: 'Serve', value: Math.round(60 + winRate * 30), fullMark: 100 },
-      { skill: 'Return', value: Math.round(55 + winRate * 35), fullMark: 100 },
-      { skill: 'Net Play', value: Math.round(50 + winRate * 40), fullMark: 100 },
-      { skill: 'Consistency', value: Math.round(65 + winRate * 25), fullMark: 100 },
-      { skill: 'Power', value: Math.round(45 + winRate * 45), fullMark: 100 },
-      { skill: 'Placement', value: Math.round(58 + winRate * 32), fullMark: 100 },
-    ];
-
-    const recentForm: ('W' | 'L')[] = Array.from({ length: 8 }, () =>
-      Math.random() < winRate ? 'W' : 'L'
-    );
-
-    return {
-      ratingTrend,
-      winLossByMonth,
-      skillRadar,
-      recentForm,
-      avgRatingChange: Math.round((rating - 1200) / Math.max(1, games) * 10) / 10,
-      bestStreak: profile?.longest_streak || 0,
-      peakRating: Math.max(rating, rating + Math.round(Math.random() * 50)),
-    };
-  }, [profile]);
 
   const fetchInsights = useCallback(async () => {
     setLoading(true);
     try {
       if (!profile?.id) {
-        setInsights(buildMockInsights());
+        setInsights(null);
+        setHasData(false);
         return;
       }
+      
       const { data } = await supabase
         .from('match_history')
         .select('id, result, rating_change, played_at, opponent_rating')
@@ -97,9 +53,12 @@ export default function PerformanceInsights() {
         .limit(30);
 
       if (!data || data.length === 0) {
-        setInsights(buildMockInsights());
+        setInsights(null);
+        setHasData(false);
         return;
       }
+
+      setHasData(true);
 
       // Build rating trend from real data
       let runningRating = profile.rating || 1200;
@@ -118,14 +77,42 @@ export default function PerformanceInsights() {
       });
       const winLossByMonth = Object.entries(monthMap).slice(-6).map(([month, v]) => ({ month, ...v }));
 
-      const mock = buildMockInsights();
-      setInsights({ ...mock, ratingTrend, winLossByMonth });
-    } catch {
-      setInsights(buildMockInsights());
+      // Recent form
+      const recentForm: ('W' | 'L')[] = data.slice(0, 8).map((m) => m.result === 'win' ? 'W' : 'L');
+
+      // Calculate stats
+      const avgRatingChange = data.reduce((sum, m) => sum + (m.rating_change || 0), 0) / data.length;
+      const bestStreak = profile?.longest_streak || 0;
+      const peakRating = Math.max(profile?.rating || 1200, ...ratingTrend.map(t => t.rating));
+
+      // Generate skill radar based on win rate
+      const winRate = data.filter(m => m.result === 'win').length / data.length;
+      const skillRadar = [
+        { skill: 'Serve', value: Math.round(60 + winRate * 30), fullMark: 100 },
+        { skill: 'Return', value: Math.round(55 + winRate * 35), fullMark: 100 },
+        { skill: 'Net Play', value: Math.round(50 + winRate * 40), fullMark: 100 },
+        { skill: 'Consistency', value: Math.round(65 + winRate * 25), fullMark: 100 },
+        { skill: 'Power', value: Math.round(45 + winRate * 45), fullMark: 100 },
+        { skill: 'Placement', value: Math.round(58 + winRate * 32), fullMark: 100 },
+      ];
+
+      setInsights({
+        ratingTrend,
+        winLossByMonth,
+        skillRadar,
+        recentForm,
+        avgRatingChange: Math.round(avgRatingChange * 10) / 10,
+        bestStreak,
+        peakRating,
+      });
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+      setInsights(null);
+      setHasData(false);
     } finally {
       setLoading(false);
     }
-  }, [profile, supabase, buildMockInsights]);
+  }, [profile, supabase]);
 
   useEffect(() => { fetchInsights(); }, [fetchInsights]);
 
@@ -138,6 +125,22 @@ export default function PerformanceInsights() {
         </div>
         <div className="flex items-center justify-center py-10">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasData) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Activity size={18} className="text-primary" />
+          <h2 className="font-semibold text-foreground">Performance Insights</h2>
+        </div>
+        <div className="flex flex-col items-center justify-center py-8 gap-2">
+          <Activity size={32} className="text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">No match data available yet</p>
+          <p className="text-xs text-muted-foreground">Play some matches to see your performance insights</p>
         </div>
       </div>
     );

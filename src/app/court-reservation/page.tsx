@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { createClient } from '@/lib/supabase/client';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { CalendarDays, Clock, ChevronLeft, ChevronRight, CheckCircle2, Loader2, MapPin, Users, Zap, AlertCircle } from 'lucide-react';
@@ -32,37 +33,23 @@ interface Reservation {
   players: number;
 }
 
-const MOCK_COURTS: Court[] = [
-  { id: 'court-1', name: 'Court 1', surface: 'Hardcourt', status: 'active' },
-  { id: 'court-2', name: 'Court 2', surface: 'Hardcourt', status: 'active' },
-  { id: 'court-3', name: 'Court 3', surface: 'Cushioned', status: 'active' },
-  { id: 'court-4', name: 'Court 4', surface: 'Cushioned', status: 'active' },
-  { id: 'court-5', name: 'Court 5', surface: 'Hardcourt', status: 'active' },
-  { id: 'court-6', name: 'Court 6', surface: 'Hardcourt', status: 'maintenance' },
-];
-
 const TIME_SLOTS: TimeSlot[] = [
   { time: '06:00', label: '6:00 AM', available: true },
   { time: '07:00', label: '7:00 AM', available: true },
-  { time: '08:00', label: '8:00 AM', available: false, reserved: true },
-  { time: '09:00', label: '9:00 AM', available: false, reserved: true },
+  { time: '08:00', label: '8:00 AM', available: true },
+  { time: '09:00', label: '9:00 AM', available: true },
   { time: '10:00', label: '10:00 AM', available: true },
   { time: '11:00', label: '11:00 AM', available: true },
-  { time: '12:00', label: '12:00 PM', available: false, reserved: true },
+  { time: '12:00', label: '12:00 PM', available: true },
   { time: '13:00', label: '1:00 PM', available: true },
   { time: '14:00', label: '2:00 PM', available: true },
-  { time: '15:00', label: '3:00 PM', available: false, reserved: true },
+  { time: '15:00', label: '3:00 PM', available: true },
   { time: '16:00', label: '4:00 PM', available: true },
   { time: '17:00', label: '5:00 PM', available: true },
   { time: '18:00', label: '6:00 PM', available: true },
-  { time: '19:00', label: '7:00 PM', available: false, reserved: true },
+  { time: '19:00', label: '7:00 PM', available: true },
   { time: '20:00', label: '8:00 PM', available: true },
   { time: '21:00', label: '9:00 PM', available: true },
-];
-
-const MOCK_MY_RESERVATIONS: Reservation[] = [
-  { id: 'res-1', court_id: 'court-2', court_name: 'Court 2', date: '2026-07-23', time_slot: '10:00', duration: 1, status: 'confirmed', players: 4 },
-  { id: 'res-2', court_id: 'court-4', court_name: 'Court 4', date: '2026-07-25', time_slot: '16:00', duration: 2, status: 'pending', players: 2 },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -88,6 +75,7 @@ function formatDisplayDate(dateStr: string): string {
 
 export default function CourtReservationPage() {
   const { profile } = useAuth();
+  const supabase = createClient();
   const [selectedDate, setSelectedDate] = useState<string>(formatDate(new Date()));
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -95,8 +83,62 @@ export default function CourtReservationPage() {
   const [players, setPlayers] = useState<number>(2);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
-  const [myReservations, setMyReservations] = useState<Reservation[]>(MOCK_MY_RESERVATIONS);
+  const [myReservations, setMyReservations] = useState<Reservation[]>([]);
+  const [courts, setCourts] = useState<Court[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCourts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('courts')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setCourts(data || []);
+    } catch (error) {
+      console.error('Error fetching courts:', error);
+      toast.error('Failed to load courts');
+    }
+  }, [supabase]);
+
+  const fetchMyReservations = useCallback(async () => {
+    if (!profile?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*, courts(name)')
+        .eq('user_id', profile.id)
+        .gte('date', formatDate(new Date()))
+        .order('date', { ascending: true });
+      
+      if (error) throw error;
+      
+      const mapped = (data || []).map((r: any) => ({
+        id: r.id,
+        court_id: r.court_id,
+        court_name: r.courts?.name || 'Unknown Court',
+        date: r.date,
+        time_slot: r.time_slot,
+        duration: r.duration,
+        status: r.status,
+        players: r.players
+      }));
+      
+      setMyReservations(mapped);
+    } catch (error) {
+      console.error('Error fetching reservations:', error);
+    }
+  }, [supabase, profile?.id]);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchCourts(), fetchMyReservations()]).finally(() => {
+      setLoading(false);
+    });
+  }, [fetchCourts, fetchMyReservations]);
 
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i + weekOffset * 7));
@@ -249,7 +291,7 @@ export default function CourtReservationPage() {
                 Select Court
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {MOCK_COURTS.map((court) => {
+                {courts.map((court) => {
                   const isMaintenance = court.status === 'maintenance';
                   const isSelected = selectedCourt?.id === court.id;
                   return (

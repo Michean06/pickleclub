@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { createClient } from '@/lib/supabase/client';
 import {
   Shield, Plus, Search, ChevronDown, ChevronUp, Check, X,
   Edit2, Trash2, Users, Lock, Eye, Settings, CreditCard,
-  Calendar, MessageSquare, BarChart2, Wrench, UserCheck, Save
+  Calendar, MessageSquare, BarChart2, Wrench, UserCheck, Save, Loader2
 } from 'lucide-react';
 
 type RoleId = 'admin' | 'staff' | 'player' | 'guest';
@@ -104,18 +105,11 @@ const INITIAL_ROLES: Role[] = [
   },
 ];
 
-const MOCK_USERS = [
-  { id: 'u1', name: 'Sam Torres', email: 'sam.torres@pickleclub.com', role: 'admin' as RoleId, avatar: 'ST' },
-  { id: 'u2', name: 'Alex Rivera', email: 'alex.rivera@pickleclub.com', role: 'staff' as RoleId, avatar: 'AR' },
-  { id: 'u3', name: 'Jordan Lee', email: 'jordan.lee@pickleclub.com', role: 'staff' as RoleId, avatar: 'JL' },
-  { id: 'u4', name: 'Maria Santos', email: 'maria.santos@pickleclub.com', role: 'player' as RoleId, avatar: 'MS' },
-  { id: 'u5', name: 'Chris Park', email: 'chris.park@pickleclub.com', role: 'player' as RoleId, avatar: 'CP' },
-  { id: 'u6', name: 'Dana Kim', email: 'dana.kim@pickleclub.com', role: 'guest' as RoleId, avatar: 'DK' },
-];
 
 const CATEGORIES = [...new Set(ALL_PERMISSIONS.map((p) => p.category))];
 
 export default function RolePermissionsPage() {
+  const supabase = createClient();
   const [roles, setRoles] = useState<Role[]>(INITIAL_ROLES);
   const [selectedRole, setSelectedRole] = useState<RoleId>('admin');
   const [activeTab, setActiveTab] = useState<'permissions' | 'users'>('permissions');
@@ -123,6 +117,27 @@ export default function RolePermissionsPage() {
   const [search, setSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [saved, setSaved] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, email, role')
+        .order('full_name');
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const role = roles.find((r) => r.id === selectedRole)!;
 
@@ -159,9 +174,9 @@ export default function RolePermissionsPage() {
       p.description.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredUsers = MOCK_USERS.filter(
+  const filteredUsers = users.filter(
     (u) =>
-      u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.full_name.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.email.toLowerCase().includes(userSearch.toLowerCase())
   );
 

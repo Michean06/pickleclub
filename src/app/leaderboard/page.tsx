@@ -53,51 +53,6 @@ const ANALYTICS_TABS: { key: AnalyticsTab; label: string; icon: React.ElementTyp
   { key: 'trends', label: 'Rating Trends', icon: Activity },
 ];
 
-// Mock analytics data
-const TOP10_WINS_DATA = [
-  { name: 'Alex R.', wins: 87 },
-  { name: 'Maria S.', wins: 81 },
-  { name: 'Juan D.', wins: 76 },
-  { name: 'Carla M.', wins: 72 },
-  { name: 'Paolo T.', wins: 68 },
-  { name: 'Lena V.', wins: 65 },
-  { name: 'Marco B.', wins: 61 },
-  { name: 'Sofia A.', wins: 58 },
-  { name: 'Diego F.', wins: 54 },
-  { name: 'Nina C.', wins: 51 },
-];
-
-const SKILL_DIST_DATA = [
-  { skill: 'Beginner', count: 34, fill: '#94a3b8' },
-  { skill: 'Intermediate', count: 58, fill: '#3b82f6' },
-  { skill: 'Advanced', count: 27, fill: '#9333ea' },
-  { skill: 'Pro', count: 11, fill: '#f59e0b' },
-];
-
-const RATING_TREND_DATA = [
-  { month: 'Feb', avg: 1180, top: 1620, bottom: 820 },
-  { month: 'Mar', avg: 1195, top: 1650, bottom: 830 },
-  { month: 'Apr', avg: 1210, top: 1680, bottom: 840 },
-  { month: 'May', avg: 1225, top: 1710, bottom: 850 },
-  { month: 'Jun', avg: 1248, top: 1740, bottom: 860 },
-  { month: 'Jul', avg: 1262, top: 1780, bottom: 870 },
-];
-
-const RADAR_DATA = [
-  { subject: 'Win Rate', A: 82, B: 65, fullMark: 100 },
-  { subject: 'Games', A: 90, B: 55, fullMark: 100 },
-  { subject: 'Streak', A: 75, B: 40, fullMark: 100 },
-  { subject: 'Rating', A: 88, B: 60, fullMark: 100 },
-  { subject: 'Consistency', A: 70, B: 72, fullMark: 100 },
-];
-
-const ANALYTICS_KPI = [
-  { label: 'Active Players', value: '130', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-  { label: 'Avg Rating', value: '1,262', icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
-  { label: 'Avg Win Rate', value: '54%', icon: Target, color: 'text-violet-600', bg: 'bg-violet-50' },
-  { label: 'Avg Games', value: '38', icon: Zap, color: 'text-blue-600', bg: 'bg-blue-50' },
-];
-
 export default function LeaderboardPage() {
   const { profile } = useAuth();
   const supabase = createClient();
@@ -108,6 +63,13 @@ export default function LeaderboardPage() {
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTab>('overview');
   const [showAnalytics, setShowAnalytics] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [analyticsData, setAnalyticsData] = useState({
+    top10Wins: [] as any[],
+    skillDist: [] as any[],
+    ratingTrend: [] as any[],
+    radarData: [] as any[],
+    kpi: [] as any[]
+  });
 
   const fetchLeaderboard = useCallback(async () => {
     try {
@@ -130,12 +92,67 @@ export default function LeaderboardPage() {
 
       setEntries(mapped);
       setLastUpdated(new Date());
+      
+      // Fetch analytics data
+      await fetchAnalyticsData(mapped);
     } catch (err: any) {
       setError(err?.message || 'Failed to load leaderboard');
     } finally {
       setLoading(false);
     }
   }, [supabase, activeTab]);
+
+  const fetchAnalyticsData = async (leaderboardData: LeaderboardEntry[]) => {
+    try {
+      // Top 10 wins data
+      const top10Wins = leaderboardData.slice(0, 10).map(p => ({
+        name: p.full_name.split(' ').map(n => n[0]).join('') + ' ' + p.full_name.split(' ').pop()?.[0],
+        wins: p.wins
+      }));
+
+      // Skill distribution
+      const skillCounts = leaderboardData.reduce((acc, p) => {
+        acc[p.skill_level] = (acc[p.skill_level] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const skillColors: Record<string, string> = {
+        beginner: '#94a3b8',
+        intermediate: '#3b82f6', 
+        advanced: '#9333ea',
+        pro: '#f59e0b'
+      };
+      
+      const skillDist = Object.entries(skillCounts).map(([skill, count]) => ({
+        skill: skill.charAt(0).toUpperCase() + skill.slice(1),
+        count,
+        fill: skillColors[skill] || '#94a3b8'
+      }));
+
+      // KPI calculations
+      const activePlayers = leaderboardData.length;
+      const avgRating = Math.round(leaderboardData.reduce((sum, p) => sum + p.rating, 0) / activePlayers);
+      const avgWinRate = Math.round(leaderboardData.reduce((sum, p) => sum + p.win_rate, 0) / activePlayers);
+      const avgGames = Math.round(leaderboardData.reduce((sum, p) => sum + p.games_played, 0) / activePlayers);
+
+      const kpi = [
+        { label: 'Active Players', value: activePlayers.toString(), icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
+        { label: 'Avg Rating', value: avgRating.toLocaleString(), icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
+        { label: 'Avg Win Rate', value: `${avgWinRate}%`, icon: Target, color: 'text-violet-600', bg: 'bg-violet-50' },
+        { label: 'Avg Games', value: avgGames.toString(), icon: Zap, color: 'text-blue-600', bg: 'bg-blue-50' },
+      ];
+
+      setAnalyticsData({
+        top10Wins,
+        skillDist,
+        ratingTrend: [], // Would need historical data
+        radarData: [], // Would need more detailed stats
+        kpi
+      });
+    } catch (err) {
+      console.error('Failed to fetch analytics data:', err);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -217,7 +234,7 @@ export default function LeaderboardPage() {
           <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden fade-in">
             {/* Analytics KPI strip */}
             <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-border border-b border-border">
-              {ANALYTICS_KPI.map((kpi) => {
+              {analyticsData.kpi.map((kpi) => {
                 const KpiIcon = kpi.icon;
                 return (
                   <div key={kpi.label} className="flex items-center gap-3 px-5 py-4">
@@ -259,7 +276,7 @@ export default function LeaderboardPage() {
                 <div className="flex flex-col gap-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Top 10 Players by Wins</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={TOP10_WINS_DATA} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <BarChart data={analyticsData.top10Wins} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                       <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
@@ -278,13 +295,13 @@ export default function LeaderboardPage() {
                   <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Players by Skill Level</p>
                     <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={SKILL_DIST_DATA} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <BarChart data={analyticsData.skillDist} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                         <XAxis dataKey="skill" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                         <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                         <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
                         <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                          {SKILL_DIST_DATA.map((entry, index) => (
+                          {analyticsData.skillDist.map((entry, index) => (
                             <rect key={`cell-${index}`} fill={entry.fill} />
                           ))}
                         </Bar>
@@ -294,7 +311,7 @@ export default function LeaderboardPage() {
                   <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Top vs Avg Player Profile</p>
                     <ResponsiveContainer width="100%" height={200}>
-                      <RadarChart data={RADAR_DATA}>
+                      <RadarChart data={analyticsData.radarData}>
                         <PolarGrid stroke="var(--border)" />
                         <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                         <PolarRadiusAxis tick={{ fontSize: 9 }} domain={[0, 100]} />
@@ -311,7 +328,7 @@ export default function LeaderboardPage() {
                 <div className="flex flex-col gap-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rating Trends (6 Months)</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={RATING_TREND_DATA} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <LineChart data={analyticsData.ratingTrend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                       <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />

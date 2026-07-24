@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
-
 import { useAuth } from '@/contexts/AuthContext';
-import { Bell, Trophy, Calendar, CreditCard, MessageSquare, AlertTriangle, CheckCircle2, Info, X, Check, CheckCheck, Filter, Trash2, Activity } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Bell, Trophy, Calendar, CreditCard, MessageSquare, AlertTriangle, CheckCircle2, Info, X, Check, CheckCheck, Filter, Trash2, Activity, Loader2 } from 'lucide-react';
 
 type NotifCategory = 'all' | 'match' | 'booking' | 'payment' | 'message' | 'system' | 'alert';
 type NotifPriority = 'high' | 'medium' | 'low';
@@ -36,90 +36,6 @@ const PRIORITY_DOT: Record<NotifPriority, string> = {
   low:    'bg-muted-foreground',
 };
 
-// Mock notifications — in production these would come from a notifications table
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'n1', category: 'match', priority: 'high', isRead: false,
-    title: 'Match Result Posted',
-    body: 'Your match on Court A ended 11–7. Rating +18 pts. Great win!',
-    createdAt: new Date(Date.now() - 5 * 60 * 1000),
-    actionLabel: 'View Match', actionHref: '/',
-  },
-  {
-    id: 'n2', category: 'match', priority: 'medium', isRead: false,
-    title: 'Live Match Started',
-    body: 'A match you are following just started on Court B. Score: 0–0.',
-    createdAt: new Date(Date.now() - 12 * 60 * 1000),
-    actionLabel: 'Watch Live', actionHref: '/',
-  },
-  {
-    id: 'n3', category: 'booking', priority: 'high', isRead: false,
-    title: 'Court Reservation Confirmed',
-    body: 'Court C is reserved for you tomorrow at 9:00 AM for 60 minutes.',
-    createdAt: new Date(Date.now() - 30 * 60 * 1000),
-    actionLabel: 'View Booking', actionHref: '/booking-confirmation',
-  },
-  {
-    id: 'n4', category: 'payment', priority: 'medium', isRead: true,
-    title: 'Credits Purchased',
-    body: 'You successfully purchased 50 credits. New balance: 120 credits.',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    actionLabel: 'View Wallet', actionHref: '/buy-credits',
-  },
-  {
-    id: 'n5', category: 'message', priority: 'medium', isRead: false,
-    title: 'New Message from Alex Reyes',
-    body: '"Hey, are you up for a doubles match this Saturday?"',
-    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    actionLabel: 'Reply', actionHref: '/player-messaging',
-  },
-  {
-    id: 'n6', category: 'alert', priority: 'high', isRead: false,
-    title: 'Court D Under Maintenance',
-    body: 'Court D is temporarily closed for net replacement. Expected back by 3 PM.',
-    createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-  },
-  {
-    id: 'n7', category: 'match', priority: 'low', isRead: true,
-    title: 'Weekly Match Summary',
-    body: 'This week: 3 wins, 1 loss. Win rate 75%. Rating up by 42 pts.',
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    actionLabel: 'View Stats', actionHref: '/',
-  },
-  {
-    id: 'n8', category: 'booking', priority: 'medium', isRead: true,
-    title: 'Booking Reminder',
-    body: 'Your court reservation on Court A starts in 1 hour. Don\'t forget to check in!',
-    createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-    actionLabel: 'Check In', actionHref: '/booking-confirmation',
-  },
-  {
-    id: 'n9', category: 'system', priority: 'low', isRead: true,
-    title: 'App Updated to v2.4',
-    body: 'New features: Live match results, notification center, and improved leaderboard.',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: 'n10', category: 'payment', priority: 'high', isRead: false,
-    title: 'Low Credit Balance',
-    body: 'You have only 5 credits remaining. Top up to keep booking courts.',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    actionLabel: 'Buy Credits', actionHref: '/buy-credits',
-  },
-  {
-    id: 'n11', category: 'message', priority: 'low', isRead: true,
-    title: 'Group Chat: Weekend Warriors',
-    body: 'Maria Santos: "Who\'s in for Sunday morning open play?"',
-    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
-    actionLabel: 'Open Chat', actionHref: '/player-messaging',
-  },
-  {
-    id: 'n12', category: 'alert', priority: 'medium', isRead: true,
-    title: 'Queue Position Update',
-    body: 'You moved up to position #2 in the waiting queue. Estimated wait: 8 minutes.',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-  },
-];
 
 function timeAgo(date: Date): string {
   const diff = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -131,9 +47,33 @@ function timeAgo(date: Date): string {
 
 export default function NotificationCenterPage() {
   const { profile } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const supabase = createClient();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeCategory, setActiveCategory] = useState<NotifCategory>('all');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [profile]);
+
+  const loadNotifications = async () => {
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // TODO: Replace with actual notifications table when implemented
+      // For now, return empty array as mock data is removed
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -269,7 +209,11 @@ export default function NotificationCenterPage() {
 
         {/* Notification list */}
         <div className="bg-card border border-border rounded-xl shadow-card overflow-hidden">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 size={24} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <CheckCircle2 size={36} className="mb-3 opacity-20" />
               <p className="text-sm font-semibold">

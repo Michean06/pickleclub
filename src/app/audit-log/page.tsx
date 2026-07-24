@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { createClient } from '@/lib/supabase/client';
 
 import { Shield, Search, RefreshCw, AlertCircle, Download, ChevronLeft, ChevronRight, User, CreditCard, Calendar, Settings, LogIn, LogOut, Trash2, Plus, Activity, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
@@ -23,21 +24,6 @@ interface AuditEntry {
   ip: string;
   status: 'success' | 'failed';
 }
-
-const MOCK_LOGS: AuditEntry[] = [
-  { id: 'a1', timestamp: '2026-07-22T05:10:00Z', actor: 'Sam Torres', actorRole: 'admin', action: 'User Login', category: 'auth', severity: 'info', target: 'sam.torres@pickleclub.com', details: 'Successful login from web browser', ip: '192.168.1.10', status: 'success' },
-  { id: 'a2', timestamp: '2026-07-22T05:08:30Z', actor: 'Alex Rivera', actorRole: 'staff', action: 'Court Status Changed', category: 'admin', severity: 'warning', target: 'Court 3', details: 'Status changed from available to maintenance', ip: '192.168.1.22', status: 'success' },
-  { id: 'a3', timestamp: '2026-07-22T05:05:00Z', actor: 'Jordan Lee', actorRole: 'staff', action: 'Credits Added', category: 'credits', severity: 'info', target: 'Player PKL-2026-0042', details: 'Added 50 credits via staff override', ip: '192.168.1.15', status: 'success' },
-  { id: 'a4', timestamp: '2026-07-22T04:58:00Z', actor: 'System', actorRole: 'system', action: 'Session Auto-Ended', category: 'system', severity: 'info', target: 'Court 1 – Session #1042', details: 'Session exceeded 90 min limit, auto-ended', ip: '127.0.0.1', status: 'success' },
-  { id: 'a5', timestamp: '2026-07-22T04:50:00Z', actor: 'Unknown', actorRole: 'player', action: 'Failed Login Attempt', category: 'auth', severity: 'critical', target: 'admin@pickleclub.com', details: '3 consecutive failed login attempts', ip: '203.0.113.42', status: 'failed' },
-  { id: 'a6', timestamp: '2026-07-22T04:45:00Z', actor: 'Sam Torres', actorRole: 'admin', action: 'Player Account Suspended', category: 'admin', severity: 'critical', target: 'Player PKL-2026-0088', details: 'Account suspended due to policy violation', ip: '192.168.1.10', status: 'success' },
-  { id: 'a7', timestamp: '2026-07-22T04:30:00Z', actor: 'Maria Santos', actorRole: 'player', action: 'Booking Created', category: 'booking', severity: 'info', target: 'Court 2 – Jul 23 09:00', details: 'New reservation for 1 hour, 2 players', ip: '192.168.1.55', status: 'success' },
-  { id: 'a8', timestamp: '2026-07-22T04:20:00Z', actor: 'Alex Rivera', actorRole: 'staff', action: 'Booking Cancelled', category: 'booking', severity: 'warning', target: 'Booking #BK-20260722-001', details: 'Cancelled by staff on behalf of player', ip: '192.168.1.22', status: 'success' },
-  { id: 'a9', timestamp: '2026-07-22T04:10:00Z', actor: 'System', actorRole: 'system', action: 'Credits Deducted', category: 'credits', severity: 'info', target: 'Player PKL-2026-0042', details: 'Auto-deducted 20 credits for court session', ip: '127.0.0.1', status: 'success' },
-  { id: 'a10', timestamp: '2026-07-22T04:00:00Z', actor: 'Sam Torres', actorRole: 'admin', action: 'System Config Updated', category: 'system', severity: 'warning', target: 'Queue Settings', details: 'Queue threshold changed from 10 to 8', ip: '192.168.1.10', status: 'success' },
-  { id: 'a11', timestamp: '2026-07-22T03:45:00Z', actor: 'Jordan Lee', actorRole: 'staff', action: 'User Logout', category: 'auth', severity: 'info', target: 'jordan.lee@pickleclub.com', details: 'Manual logout', ip: '192.168.1.15', status: 'success' },
-  { id: 'a12', timestamp: '2026-07-22T03:30:00Z', actor: 'System', actorRole: 'system', action: 'Backup Completed', category: 'system', severity: 'info', target: 'Database Backup', details: 'Scheduled daily backup completed successfully', ip: '127.0.0.1', status: 'success' },
-];
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
   'User Login': LogIn,
@@ -71,14 +57,38 @@ const CATEGORY_STYLES: Record<string, string> = {
 const PAGE_SIZE = 8;
 
 export default function AuditLogPage() {
-  const [logs, setLogs] = useState<AuditEntry[]>(MOCK_LOGS);
-  const [loading, setLoading] = useState(false);
+  const supabase = createClient();
+  const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<ActionCategory>('all');
   const [severityFilter, setSeverityFilter] = useState<ActionSeverity>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const fetchAuditLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(100);
+      
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchAuditLogs();
+  }, [fetchAuditLogs]);
 
   const filtered = logs.filter((log) => {
     if (categoryFilter !== 'all' && log.category !== categoryFilter) return false;
@@ -140,7 +150,7 @@ export default function AuditLogPage() {
               <Download size={14} />
               Export CSV
             </button>
-            <button onClick={() => setLogs([...MOCK_LOGS])} className="btn-secondary text-sm gap-2">
+            <button onClick={() => { setLoading(true); fetchAuditLogs(); }} className="btn-secondary text-sm gap-2">
               <RefreshCw size={14} />
               Refresh
             </button>
