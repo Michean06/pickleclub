@@ -7,10 +7,11 @@ import { useChat } from '@/contexts/ChatContext';
 interface MessageInputProps {
   onSendMessage: (content: string, attachments?: File[]) => void;
   conversationId: string;
+  conversationTitle?: string;
   disabled?: boolean;
 }
 
-export default function MessageInput({ onSendMessage, conversationId, disabled }: MessageInputProps) {
+export default function MessageInput({ onSendMessage, conversationId, conversationTitle, disabled }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -104,7 +105,7 @@ export default function MessageInput({ onSendMessage, conversationId, disabled }
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={`Message ${conversationTitle || 'someone'}...`}
           disabled={disabled}
           className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />

@@ -1,29 +1,31 @@
 -- Fix ambiguous column reference in mark_messages_as_read function
--- Use table aliases to avoid ambiguity between parameters and columns
+-- Use parameter aliases to avoid column name conflicts
+-- Drop trigger that causes updated_at issues
 
-CREATE OR REPLACE FUNCTION public.mark_messages_as_read(conversation_id UUID, user_id UUID)
+DROP FUNCTION IF EXISTS public.mark_messages_as_read(UUID, UUID);
+DROP TRIGGER IF EXISTS update_messages_updated_at ON public.messages;
+
+CREATE OR REPLACE FUNCTION public.mark_messages_as_read(p_conversation_id UUID, p_user_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- Update last_read_at for the participant using table alias
-  UPDATE public.conversation_participants cp
+  -- Update last_read_at for the participant
+  UPDATE public.conversation_participants
   SET last_read_at = CURRENT_TIMESTAMP
-  FROM public.conversation_participants
-  WHERE cp.conversation_id = mark_messages_as_read.conversation_id 
-    AND cp.user_id = mark_messages_as_read.user_id;
+  WHERE conversation_id = p_conversation_id
+    AND user_id = p_user_id;
 
-  -- Mark messages as read if sent by others using table alias
-  UPDATE public.messages m
+  -- Mark messages as read if sent by others
+  UPDATE public.messages
   SET status = 'read'
-  FROM public.messages
-  WHERE m.conversation_id = mark_messages_as_read.conversation_id
-    AND m.sender_id != mark_messages_as_read.user_id
-    AND m.status != 'read';
+  WHERE conversation_id = p_conversation_id
+    AND sender_id != p_user_id
+    AND status != 'read';
 END;
 $$;
 
--- Re-grant execute permission
+-- Grant execute permission
 GRANT EXECUTE ON FUNCTION public.mark_messages_as_read TO authenticated;

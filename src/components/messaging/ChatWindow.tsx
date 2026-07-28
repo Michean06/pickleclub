@@ -134,6 +134,7 @@ export default function ChatWindow() {
       <MessageInput
         onSendMessage={handleSendMessage}
         conversationId={activeConversation.id}
+        conversationTitle={activeConversation.title}
       />
     </div>
   );

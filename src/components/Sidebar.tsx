@@ -110,19 +110,15 @@ export default function Sidebar({ collapsed, onToggle, isMobile = false, isFixed
 
     fetchUnreadCount();
 
-    // Poll for updates every 30 seconds instead of using realtime
+    // Poll for updates every 10 seconds
     const interval = setInterval(() => {
       fetchUnreadCount();
-      console.log('[Sidebar] Refreshing profile...');
-      refreshProfile().then(() => {
-        console.log('[Sidebar] Profile refreshed');
-      });
-    }, 30000);
+    }, 10000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [profile?.id, supabase, refreshProfile]);
+  }, [profile?.id, supabase]);
 
   const handleSignOut = async () => {
     setSigningOut(true);

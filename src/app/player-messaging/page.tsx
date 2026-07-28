@@ -95,7 +95,7 @@ export default function PlayerMessagingPage() {
           
           // Check if user is a member of this conversation
           const { data: member } = await supabase
-            .from('conversation_participants')
+            .from('conversation_members')
             .select('conversation_id')
             .eq('conversation_id', payload.new.conversation_id)
             .eq('user_id', currentUser.id)
@@ -116,7 +116,11 @@ export default function PlayerMessagingPage() {
                 status: payload.new.status,
                 isOwn: payload.new.sender_id === currentUser.id,
               };
-              setMessages((prev) => [...prev, newMsg]);
+              setMessages((prev) => {
+                const exists = prev.some(msg => msg.id === newMsg.id);
+                if (exists) return prev;
+                return [...prev, newMsg];
+              });
             }
           }
         }
@@ -135,6 +139,31 @@ export default function PlayerMessagingPage() {
     if (currentUser) {
       loadConversations();
     }
+
+    // Subscribe to conversation_members changes for realtime unread count updates
+    const membersChannel = supabase
+      .channel('conversation-members-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversation_members',
+          filter: `user_id=eq.${currentUser?.id}`
+        },
+        (payload) => {
+          console.log('Conversation member updated:', payload);
+          // Reload conversations to update unread counts
+          loadConversations();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Conversation members subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(membersChannel);
+    };
   }, [currentUser]);
 
   useEffect(() => {
@@ -185,7 +214,11 @@ export default function PlayerMessagingPage() {
               status: payload.new.status,
               isOwn: payload.new.sender_id === currentUser?.id,
             };
-            setMessages((prev) => [...prev, newMsg]);
+            setMessages((prev) => {
+              const exists = prev.some(msg => msg.id === newMsg.id);
+              if (exists) return prev;
+              return [...prev, newMsg];
+            });
           }
           // Reload conversations to update last message
           loadConversations();
@@ -324,20 +357,6 @@ export default function PlayerMessagingPage() {
           isOwn: msg.sender_id === currentUser.id,
         }));
         setMessages(formattedMessages);
-        
-        // Mark messages as read
-        const { error: markError } = await supabase.rpc('mark_messages_as_read', {
-          conversation_id: conversationId,
-          user_id: currentUser.id,
-        });
-        
-        if (markError) {
-          console.error('[PlayerMessaging] mark_messages_as_read error:', markError);
-        } else {
-          console.log('[PlayerMessaging] Messages marked as read successfully');
-          // Reload conversations to update unread counts
-          await loadConversations();
-        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -446,16 +465,35 @@ export default function PlayerMessagingPage() {
   const pinned = filteredConvs.filter((c) => c.pinned);
   const unpinned = filteredConvs.filter((c) => !c.pinned);
 
-  const handleSelectConv = (conv: Conversation) => {
+  const handleSelectConv = async (conv: Conversation) => {
     setActiveConv(conv);
     setMessages(conv.messages);
     setMobileView('chat');
     setShowMenu(false);
-    
-    // Clear unread count for this conversation immediately
-    setConversations(prev => 
-      prev.map(c => c.id === conv.id ? { ...c, unread: 0 } : c)
-    );
+
+    // Mark messages as read via RPC
+    if (currentUser) {
+      try {
+        const { error } = await supabase.rpc('mark_messages_as_read', {
+          p_conversation_id: conv.id,
+          p_user_id: currentUser.id,
+        });
+
+        if (error) {
+          console.error('[PlayerMessaging] mark_messages_as_read error:', error);
+        } else {
+          console.log('[PlayerMessaging] Messages marked as read successfully');
+          // Clear unread count for this conversation immediately
+          setConversations(prev =>
+            prev.map(c => c.id === conv.id ? { ...c, unread: 0 } : c)
+          );
+          // Reload conversations to ensure database state is reflected
+          await loadConversations();
+        }
+      } catch (error) {
+        console.error('[PlayerMessaging] Error marking as read:', error);
+      }
+    }
   };
 
   const handleSend = async () => {

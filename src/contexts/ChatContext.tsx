@@ -157,10 +157,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         },
         (payload) => {
           console.log('New message received:', payload);
-          setMessages(prev => ({
-            ...prev,
-            [conversationId]: [...(prev[conversationId] || []), payload.new as Message]
-          }));
+          setMessages(prev => {
+            const existing = prev[conversationId] || [];
+            const exists = existing.some(msg => msg.id === payload.new.id);
+            if (exists) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [conversationId]: [...existing, payload.new as Message]
+            };
+          });
         }
       )
       .on(
@@ -279,11 +286,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      await supabase
-        .from('conversation_members')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('conversation_id', conversationId)
-        .eq('user_id', user.id);
+      const { error } = await supabase.rpc('mark_messages_as_read', {
+        p_conversation_id: conversationId,
+        p_user_id: user.id,
+      });
+
+      if (error) {
+        console.error('Error marking as read:', error);
+      }
     } catch (error) {
       console.error('Error marking as read:', error);
     }
