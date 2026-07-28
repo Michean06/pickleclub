@@ -65,6 +65,7 @@ export default function PlayerMessagingPage() {
   const [searchingPlayers, setSearchingPlayers] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,6 +74,62 @@ export default function PlayerMessagingPage() {
   useEffect(() => {
     loadCurrentUser();
   }, []);
+
+  // Global subscription for all conversations
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log('Setting up global message subscription for user:', currentUser.id);
+
+    const channel = supabase
+      .channel('global-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        async (payload) => {
+          console.log('Global: New message received:', payload);
+          
+          // Check if user is a member of this conversation
+          const { data: member } = await supabase
+            .from('conversation_participants')
+            .select('conversation_id')
+            .eq('conversation_id', payload.new.conversation_id)
+            .eq('user_id', currentUser.id)
+            .single();
+
+          if (member) {
+            console.log('User is member of conversation, reloading conversations');
+            // Reload conversations to update last message and unread counts
+            loadConversations();
+            
+            // If this is the active conversation, add the message
+            if (activeConv?.id === payload.new.conversation_id) {
+              const newMsg: Message = {
+                id: payload.new.id,
+                sender_id: payload.new.sender_id,
+                text: payload.new.text,
+                created_at: payload.new.created_at,
+                status: payload.new.status,
+                isOwn: payload.new.sender_id === currentUser.id,
+              };
+              setMessages((prev) => [...prev, newMsg]);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Global subscription status:', status);
+      });
+
+    return () => {
+      console.log('Cleaning up global subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser) {
@@ -83,13 +140,74 @@ export default function PlayerMessagingPage() {
   useEffect(() => {
     if (activeConv) {
       loadMessages(activeConv.id);
+      subscribeToMessages(activeConv.id);
     }
+
+    return () => {
+      if (activeConv) {
+        unsubscribeFromMessages();
+      }
+    };
   }, [activeConv]);
 
   const loadCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       setCurrentUser({ id: user.id });
+    }
+  };
+
+  const subscribeToMessages = (conversationId: string) => {
+    console.log('Subscribing to messages for conversation:', conversationId);
+    
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload) => {
+          console.log('New message received via realtime:', payload);
+          if (activeConv?.id === conversationId) {
+            const newMsg: Message = {
+              id: payload.new.id,
+              sender_id: payload.new.sender_id,
+              text: payload.new.text,
+              created_at: payload.new.created_at,
+              status: payload.new.status,
+              isOwn: payload.new.sender_id === currentUser?.id,
+            };
+            setMessages((prev) => [...prev, newMsg]);
+          }
+          // Reload conversations to update last message
+          loadConversations();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to realtime messages');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime channel error');
+        }
+      });
+
+    channelRef.current = channel;
+  };
+
+  const unsubscribeFromMessages = () => {
+    if (channelRef.current) {
+      console.log('Unsubscribing from messages');
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
   };
 
