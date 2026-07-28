@@ -105,8 +105,8 @@ export default function PlayerMessagingPage() {
     }
   };
 
-  const loadConversations = async () => {
-    if (!currentUser) return;
+  const loadConversations = async (): Promise<Conversation[]> => {
+    if (!currentUser) return [];
 
     // Only show the list spinner on the very first load, background
     // refreshes triggered by realtime events must not flicker the list.
@@ -191,9 +191,12 @@ export default function PlayerMessagingPage() {
         if (loadedConversations.length > 0 && !activeConv) {
           setActiveConv(loadedConversations[0]);
         }
+        return loadedConversations;
       }
+      return [];
     } catch (error) {
       console.error('Error loading conversations:', error);
+      return [];
     } finally {
       hasLoadedConversations.current = true;
       setLoading(false);
@@ -276,14 +279,19 @@ export default function PlayerMessagingPage() {
         
         setActiveConv(tempConversation);
         setMobileView('chat');
+        setConversations((prev) =>
+          prev.some((c) => c.id === convId) ? prev : [tempConversation, ...prev]
+        );
         
-        // Then reload conversations in the background
-        await loadConversations();
-        
-        // Update with the real conversation data if available
-        const realConv = conversations.find(c => c.id === convId);
+        const loadedConversations = await loadConversations();
+        const realConv = loadedConversations.find(c => c.id === convId);
         if (realConv) {
           setActiveConv(realConv);
+        } else {
+          // Freshly created conversation not returned yet, keep it visible.
+          setConversations((prev) =>
+            prev.some((c) => c.id === convId) ? prev : [tempConversation, ...prev]
+          );
         }
         
         setShowPlayerSearch(false);
