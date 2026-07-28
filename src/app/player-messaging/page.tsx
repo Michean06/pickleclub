@@ -4,15 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Search, Send, MoreVertical, Phone, Video, ChevronLeft, CheckCheck, Check, Smile, Paperclip, Pin, Archive, BellOff, Trash2, Users, MessageSquarePlus, X, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-
-interface Message {
-  id: string;
-  sender_id: string;
-  text: string;
-  created_at: string;
-  status: 'sent' | 'delivered' | 'read';
-  isOwn: boolean;
-}
+import { useRealtimeChat } from './hooks/useRealtimeChat';
 
 interface Conversation {
   id: string;
@@ -26,7 +18,6 @@ interface Conversation {
   skill: string;
   pinned?: boolean;
   muted?: boolean;
-  messages: Message[];
   otherUserId?: string;
 }
 
@@ -52,7 +43,6 @@ export default function PlayerMessagingPage() {
   const supabase = createClient();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [search, setSearch] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -63,92 +53,50 @@ export default function PlayerMessagingPage() {
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [searchingPlayers, setSearchingPlayers] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const channelRef = useRef<any>(null);
+  const activeConvIdRef = useRef<string | null>(null);
+  activeConvIdRef.current = activeConv?.id ?? null;
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const loadConversationsRef = useRef<() => void>(() => {});
+  const hasLoadedConversations = useRef(false);
+
+  const { messages, sendMessage, messagesEndRef } = useRealtimeChat({
+    conversationId: activeConv?.id ?? null,
+    currentUserId: currentUser?.id ?? null,
+    onMessagesChanged: () => loadConversationsRef.current(),
+  });
 
   useEffect(() => {
     loadCurrentUser();
   }, []);
 
-  // Global subscription for all conversations
+  // Keep the conversation list (last message / unread badges) live for
+  // conversations other than the one currently open.
   useEffect(() => {
     if (!currentUser) return;
-
-    console.log('Setting up global message subscription for user:', currentUser.id);
 
     const channel = supabase
       .channel('global-messages')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        },
-        async (payload) => {
-          console.log('Global: New message received:', payload);
-          
-          // Check if user is a member of this conversation
-          const { data: member } = await supabase
-            .from('conversation_participants')
-            .select('conversation_id')
-            .eq('conversation_id', payload.new.conversation_id)
-            .eq('user_id', currentUser.id)
-            .single();
-
-          if (member) {
-            console.log('User is member of conversation, reloading conversations');
-            // Reload conversations to update last message and unread counts
-            loadConversations();
-            
-            // If this is the active conversation, add the message
-            if (activeConv?.id === payload.new.conversation_id) {
-              const newMsg: Message = {
-                id: payload.new.id,
-                sender_id: payload.new.sender_id,
-                text: payload.new.text,
-                created_at: payload.new.created_at,
-                status: payload.new.status,
-                isOwn: payload.new.sender_id === currentUser.id,
-              };
-              setMessages((prev) => [...prev, newMsg]);
-            }
-          }
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          if (payload.new.conversation_id === activeConvIdRef.current) return;
+          loadConversationsRef.current();
         }
       )
-      .subscribe((status) => {
-        console.log('Global subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('Cleaning up global subscription');
       supabase.removeChannel(channel);
     };
-  }, [currentUser]);
+  }, [currentUser, supabase]);
 
   useEffect(() => {
     if (currentUser) {
       loadConversations();
     }
   }, [currentUser]);
-
-  useEffect(() => {
-    if (activeConv) {
-      loadMessages(activeConv.id);
-      subscribeToMessages(activeConv.id);
-    }
-
-    return () => {
-      if (activeConv) {
-        unsubscribeFromMessages();
-      }
-    };
-  }, [activeConv]);
 
   const loadCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -157,64 +105,12 @@ export default function PlayerMessagingPage() {
     }
   };
 
-  const subscribeToMessages = (conversationId: string) => {
-    console.log('Subscribing to messages for conversation:', conversationId);
-    
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
+  const loadConversations = async (): Promise<Conversation[]> => {
+    if (!currentUser) return [];
 
-    const channel = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`
-        },
-        (payload) => {
-          console.log('New message received via realtime:', payload);
-          if (activeConv?.id === conversationId) {
-            const newMsg: Message = {
-              id: payload.new.id,
-              sender_id: payload.new.sender_id,
-              text: payload.new.text,
-              created_at: payload.new.created_at,
-              status: payload.new.status,
-              isOwn: payload.new.sender_id === currentUser?.id,
-            };
-            setMessages((prev) => [...prev, newMsg]);
-          }
-          // Reload conversations to update last message
-          loadConversations();
-        }
-      )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to realtime messages');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Realtime channel error');
-        }
-      });
-
-    channelRef.current = channel;
-  };
-
-  const unsubscribeFromMessages = () => {
-    if (channelRef.current) {
-      console.log('Unsubscribing from messages');
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-  };
-
-  const loadConversations = async () => {
-    if (!currentUser) return;
-    
-    setLoading(true);
+    // Only show the list spinner on the very first load, background
+    // refreshes triggered by realtime events must not flicker the list.
+    if (!hasLoadedConversations.current) setLoading(true);
     try {
       const { data: participantData } = await supabase
         .from('conversation_participants')
@@ -285,7 +181,6 @@ export default function PlayerMessagingPage() {
             skill: conv.type === 'group' ? 'Group' : capitalize(userProfile?.skill_level || 'beginner'),
             pinned: participant.pinned,
             muted: participant.muted,
-            messages: [],
             otherUserId,
           };
         });
@@ -296,53 +191,19 @@ export default function PlayerMessagingPage() {
         if (loadedConversations.length > 0 && !activeConv) {
           setActiveConv(loadedConversations[0]);
         }
+        return loadedConversations;
       }
+      return [];
     } catch (error) {
       console.error('Error loading conversations:', error);
+      return [];
     } finally {
+      hasLoadedConversations.current = true;
       setLoading(false);
     }
   };
 
-  const loadMessages = async (conversationId: string) => {
-    if (!currentUser) return;
-    
-    try {
-      const { data: messagesData } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      if (messagesData) {
-        const formattedMessages = messagesData.map((msg: any) => ({
-          id: msg.id,
-          sender_id: msg.sender_id,
-          text: msg.text,
-          created_at: msg.created_at,
-          status: msg.status,
-          isOwn: msg.sender_id === currentUser.id,
-        }));
-        setMessages(formattedMessages);
-        
-        // Mark messages as read
-        const { error: markError } = await supabase.rpc('mark_messages_as_read', {
-          conversation_id: conversationId,
-          user_id: currentUser.id,
-        });
-        
-        if (markError) {
-          console.error('[PlayerMessaging] mark_messages_as_read error:', markError);
-        } else {
-          console.log('[PlayerMessaging] Messages marked as read successfully');
-          // Reload conversations to update unread counts
-          await loadConversations();
-        }
-      }
-    } catch (error) {
-      console.error('Error loading messages:', error);
-    }
-  };
+  loadConversationsRef.current = loadConversations;
 
   const searchPlayers = async (query: string) => {
     if (!query.trim() || !currentUser) {
@@ -413,20 +274,24 @@ export default function PlayerMessagingPage() {
           pinned: false,
           muted: false,
           skill: 'Beginner',
-          messages: [],
           otherUserId: otherUserId
         };
         
         setActiveConv(tempConversation);
         setMobileView('chat');
+        setConversations((prev) =>
+          prev.some((c) => c.id === convId) ? prev : [tempConversation, ...prev]
+        );
         
-        // Then reload conversations in the background
-        await loadConversations();
-        
-        // Update with the real conversation data if available
-        const realConv = conversations.find(c => c.id === convId);
+        const loadedConversations = await loadConversations();
+        const realConv = loadedConversations.find(c => c.id === convId);
         if (realConv) {
           setActiveConv(realConv);
+        } else {
+          // Freshly created conversation not returned yet, keep it visible.
+          setConversations((prev) =>
+            prev.some((c) => c.id === convId) ? prev : [tempConversation, ...prev]
+          );
         }
         
         setShowPlayerSearch(false);
@@ -448,7 +313,6 @@ export default function PlayerMessagingPage() {
 
   const handleSelectConv = (conv: Conversation) => {
     setActiveConv(conv);
-    setMessages(conv.messages);
     setMobileView('chat');
     setShowMenu(false);
     
@@ -460,33 +324,12 @@ export default function PlayerMessagingPage() {
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || !activeConv || !currentUser) return;
-    
-    try {
-      const { data: messageId } = await supabase.rpc('send_message', {
-        conversation_id: activeConv.id,
-        sender_id: currentUser.id,
-        message_text: text,
-      });
-      
-      if (messageId) {
-        const newMsg: Message = {
-          id: messageId,
-          sender_id: currentUser.id,
-          text,
-          created_at: new Date().toISOString(),
-          status: 'sent',
-          isOwn: true,
-        };
-        setMessages((prev) => [...prev, newMsg]);
-        setInputText('');
-        inputRef.current?.focus();
-        
-        // Reload conversations to update last message
-        await loadConversations();
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
+    if (!text) return;
+
+    const sent = await sendMessage(text);
+    if (sent) {
+      setInputText('');
+      inputRef.current?.focus();
     }
   };
 
