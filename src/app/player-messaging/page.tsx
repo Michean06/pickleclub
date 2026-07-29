@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Search, Send, MoreVertical, Phone, Video, ChevronLeft, CheckCheck, Check, Smile, Paperclip, Pin, Archive, BellOff, Trash2, Users, MessageSquarePlus, X, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useCall } from '@/contexts/CallContext';
 
 interface Message {
   id: string;
@@ -50,6 +51,7 @@ const avatarColors = ['gradient-green', 'bg-blue-500', 'bg-purple-500', 'bg-ambe
 
 export default function PlayerMessagingPage() {
   const supabase = createClient();
+  const { initiateCall } = useCall();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -706,10 +708,16 @@ export default function PlayerMessagingPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    <button
+                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => initiateCall('voice', activeConv.name, activeConv.avatarUrl || undefined, activeConv.otherUserId)}
+                    >
                       <Phone size={16} />
                     </button>
-                    <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    <button
+                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => initiateCall('video', activeConv.name, activeConv.avatarUrl || undefined, activeConv.otherUserId)}
+                    >
                       <Video size={16} />
                     </button>
                     <div className="relative">

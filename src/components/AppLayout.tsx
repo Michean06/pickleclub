@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import CallModal from '@/components/call/CallModal';
 import { Menu, ChevronRight } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -11,7 +12,6 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mobileCollapsed, setMobileCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -24,13 +24,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )}
 
       {/* Mobile sidebar */}
-      <div className={`fixed left-0 top-0 h-full z-40 md:hidden transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} isMobile={true} isFixed={false} />
+      <div className={`fixed left-0 top-0 h-full z-50 md:hidden transition-transform duration-300 ease-in-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} isMobile={true} isFixed={true} />
       </div>
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-shrink-0">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} isFixed={false} />
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} isFixed={true} />
         <div className={`sidebar-transition ${collapsed ? 'w-16' : 'w-60'}`} />
       </div>
 
@@ -53,6 +53,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </main>
       </div>
+      <CallModal />
     </div>
   );
 }

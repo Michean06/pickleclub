@@ -3,12 +3,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Smile, Paperclip, MoreVertical, Phone, Video } from 'lucide-react';
 import { useChat } from '@/contexts/ChatContext';
+import { useCall } from '@/contexts/CallContext';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
 
 export default function ChatWindow() {
   const { activeConversation, messages, typingStatus, sendMessage, markAsRead } = useChat();
+  const { initiateCall } = useCall();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -89,10 +91,24 @@ export default function ChatWindow() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" title="Voice call">
+          <button
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            title="Voice call"
+            onClick={() => {
+              const otherUserId = activeConversation.members?.find(m => m.user_id !== activeConversation.created_by)?.user_id;
+              initiateCall('voice', activeConversation.title || 'User', undefined, otherUserId);
+            }}
+          >
             <Phone className="w-5 h-5 text-gray-600" />
           </button>
-          <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" title="Video call">
+          <button
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            title="Video call"
+            onClick={() => {
+              const otherUserId = activeConversation.members?.find(m => m.user_id !== activeConversation.created_by)?.user_id;
+              initiateCall('video', activeConversation.title || 'User', undefined, otherUserId);
+            }}
+          >
             <Video className="w-5 h-5 text-gray-600" />
           </button>
           <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" title="More options">

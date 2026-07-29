@@ -5,6 +5,7 @@ import '../styles/tailwind.css';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { CallProvider } from '@/contexts/CallContext';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -41,7 +42,9 @@ export default function RootLayout({
       <body className={plusJakartaSans.className}>
         <AuthProvider>
           <ToastProvider>
-            {children}
+            <CallProvider>
+              {children}
+            </CallProvider>
           </ToastProvider>
         </AuthProvider>
         <Toaster

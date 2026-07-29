@@ -52,6 +52,13 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, isMobile = false, isFixed = true }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Close mobile sidebar when pathname changes
+  useEffect(() => {
+    if (isMobile) {
+      onToggle();
+    }
+  }, [pathname, isMobile, onToggle]);
   const { profile, signOut, refreshProfile } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -153,6 +160,7 @@ export default function Sidebar({ collapsed, onToggle, isMobile = false, isFixed
         ${isFixed ? 'fixed left-0 top-0' : ''} h-full z-40 flex flex-col bg-card border-r border-border shadow-card
         sidebar-transition overflow-y-auto
         ${collapsed ? 'w-16' : 'w-60'}
+        ${isMobile ? 'md:hidden' : ''}
       `}
     >
       {/* Logo */}
